@@ -12,28 +12,12 @@ Hopsworks Model Registry, and is served through a Streamlit dashboard.
 | File | Purpose |
 |---|---|
 | `backfill.ipynb` | **One-time** historical pull (2 years) from Open-Meteo, initial write to the Feature Store. Never scheduled: re-running it would re-fetch and re-upload 2 years of data every time. |
-| `feature_pipeline.ipynb` | **Hourly** job. Pulls a recent window from Open-Meteo's live endpoints (no ERA5 lag) and inserts only the new rows. Scheduled by `.github/workflows/feature-pipeline.yml` via [papermill](https://papermill.readthedocs.io/). |
+| `feature_pipeline.ipynb` | **Hourly** job. Pulls a recent window from Open-Meteo's live endpoints and inserts only the new rows. Scheduled by `.github/workflows/feature-pipeline.yml` via [papermill](https://papermill.readthedocs.io/). |
 | `training-pipeline-multihorizon.ipynb` | **Daily** job. Trains Ridge / RandomForest / XGBoost / MLP per horizon, prints a comparison table, registers the best model per horizon. Scheduled by `.github/workflows/training-pipeline.yml`, also via papermill. |
 | `app.py` | Streamlit dashboard: 3-day forecast with dates, current conditions, EDA, SHAP explanations, hazard alerts. |
 | `requirements.txt` | Pinned dependencies for the app and the training notebook. |
 | `requirements-feature.txt` | Lighter dependency set for the hourly feature notebook (no torch/xgboost/shap). |
 | `.github/workflows/` | GitHub Actions definitions for the two scheduled jobs above. |
-
-Both scheduled notebooks run directly via papermill, not converted to `.py` scripts. The one
-exception is `backfill.ipynb`, which mixes a one-time 2-year fetch with logic worth repeating,
-so the recurring part was split into `feature_pipeline.ipynb` instead of scheduling all of it.
-
-## What the dashboard does
-
-- **Forecast tab**: current AQI plus predicted AQI for +24h/+48h/+72h, each labeled with its
-  actual calendar date and marked as predicted. A line graph of the last 24 actual hours
-  flowing into the 3-day forecast, plus a "Current conditions" panel (PM2.5, PM10, CO, NO2,
-  SO2, O3, temperature, humidity, wind).
-- **Hazard alert**: banner when the predicted peak AQI crosses unhealthy/hazardous thresholds.
-- **EDA tab**: AQI over the full history, average AQI by hour of day, AQI trend over the last
-  24 hours, PM2.5 vs AQI scatter.
-- **Explanation tab**: SHAP contributions for the selected horizon's prediction (falls back to
-  the model's built-in feature importance if SHAP errors out).
 
 ## Setup
 
