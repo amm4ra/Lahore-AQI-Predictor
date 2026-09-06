@@ -1,0 +1,10 @@
+streamlit==1.51.0
+pandas==2.2.3
+numpy<2.5.0,>=1.26.3
+joblib==1.4.2
+scikit-learn==1.6.1
+xgboost==3.2.0
+shap==0.51.0
+hopsworks[python]==5.0.6
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.10.0
