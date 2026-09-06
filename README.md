@@ -45,7 +45,7 @@ pip install -r requirements.txt
 
 ### 2. Configure your Hopsworks credentials
 
-Create `.streamlit/secrets.toml` next to `app.py` (git-ignored, never commit it):
+Create `.streamlit/secrets.toml`:
 
 ```toml
 HOPSWORKS_KEY = "your_api_key_here"
@@ -53,17 +53,11 @@ HOPSWORKS_PROJECT = "your_project_name"
 HOPSWORKS_HOST = "eu-west.cloud.hopsworks.ai"
 ```
 
-Get the API key from Hopsworks under Account Settings > API Keys. The notebooks read the same
-key from the `HOPSWORKS_KEY` environment variable instead, so for those: `setx HOPSWORKS_KEY
-"your_key"` (Windows) or `export HOPSWORKS_KEY=your_key` (macOS/Linux) before launching Jupyter.
-
 ### 3. Populate the Feature Store (first time only)
 
 Run `backfill.ipynb` top to bottom. It creates the `lahore_aqi_features` feature group and
 loads about 2 years of history, stopping about 5 days back (the ERA5 archive's publish lag).
-Keeping it current after that is `feature_pipeline.ipynb`'s job (see CI/CD below); you can also
-run it once by hand (Run All) right after the backfill.
-
+Keeping it current after that is `feature_pipeline.ipynb`'s job (see CI/CD below)
 ### 4. Train and register models
 
 Run `training-pipeline-multihorizon.ipynb` top to bottom. It trains all four model types per
@@ -75,8 +69,6 @@ horizon, prints a comparison table, and registers the best model per horizon
 ```bash
 streamlit run app.py
 ```
-
-Opens at http://localhost:8501.
 
 ## CI/CD (GitHub Actions)
 
@@ -109,17 +101,5 @@ immediately via the sidebar's "Refresh data & models" button).
    prebuilt wheels for pinned packages like `pandas`, forcing a slow source build that can
    stall the deploy.
 4. In the app's Settings > Secrets, paste the same three keys as in `.streamlit/secrets.toml`
-   above, with your real values, no `[section]` header, just flat `KEY = "value"` lines. Save,
-   then reboot the app so it picks them up.
+   above, with your real values.
 5. Deploy.
-
-## Notes
-
-- **Predictions reflect the latest row in the feature store.** Once the CI/CD workflows above
-  are running, this stays current on its own. Without them, run `feature_pipeline.ipynb` by
-  hand, then hit "Refresh data & models" in the sidebar (feature data is cached for 1 hour).
-- **Which model wins can differ per horizon.** Check the sidebar for what's currently deployed
-  and its R2 per horizon.
-- **SHAP** uses `TreeExplainer` for RandomForest/XGBoost and `LinearExplainer` for Ridge. MLP
-  falls back to no SHAP view. If SHAP itself fails to load, the app shows the model's native
-  feature importance instead so the dashboard still runs.
