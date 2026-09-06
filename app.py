@@ -60,14 +60,17 @@ def connect():
     )
 
 
-@st.cache_resource(show_spinner="Loading models from the registry…")
+@st.cache_resource(ttl=3600, show_spinner="Loading models from the registry…")
 def load_models(_project):
     from sklearn.ensemble import RandomForestRegressor
     from xgboost import XGBRegressor
     mr = _project.get_model_registry()
     models = {}
     for h in HORIZONS:
-        m = mr.get_model(f"lahore_aqi_model_{h}h")      # latest version
+        # get_model() with no version silently defaults to version=1, not the
+        # latest — fetch all versions and take the highest instead.
+        versions = mr.get_models(f"lahore_aqi_model_{h}h")
+        m = max(versions, key=lambda v: v.version)
         d = m.download()
         scaler = joblib.load(os.path.join(d, "scaler.pkl"))
         feature_cols = joblib.load(os.path.join(d, "feature_cols.pkl"))
@@ -150,8 +153,9 @@ for h in HORIZONS:
     r2 = a["metrics"].get("r2", float("nan"))
     st.sidebar.write(f"**+{h}h** — {a['kind'].upper()}  ·  R² {r2:.2f}")
 st.sidebar.caption("Best of Ridge (statistical), RandomForest / XGBoost (ensemble) and MLP (deep) per horizon.")
-if st.sidebar.button("🔄 Refresh data"):
+if st.sidebar.button("🔄 Refresh data & models"):
     st.cache_data.clear()
+    st.cache_resource.clear()
     st.rerun()
 
 # latest fully-populated feature row
