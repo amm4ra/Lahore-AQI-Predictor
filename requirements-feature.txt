@@ -1,0 +1,6 @@
+pandas==2.2.3
+numpy<2.5.0,>=1.26.3
+requests
+hopsworks[python]==5.0.6
+papermill
+ipykernel

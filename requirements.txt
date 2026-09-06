@@ -6,5 +6,7 @@ scikit-learn==1.6.1
 xgboost==3.2.0
 shap==0.51.0
 hopsworks[python]==5.0.6
+papermill
+ipykernel
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.10.0

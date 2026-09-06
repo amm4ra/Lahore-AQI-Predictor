@@ -1,0 +1,25 @@
+name: Training Pipeline
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # daily at 03:00 UTC (~08:00 PKT)
+  workflow_dispatch: {}    # lets you trigger it manually from the Actions tab
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+      - run: python -m ipykernel install --user --name python3
+
+      - run: papermill training-pipeline-multihorizon.ipynb /tmp/training.out.ipynb --log-output
+        env:
+          HOPSWORKS_KEY: ${{ secrets.HOPSWORKS_KEY }}
+          HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+          HOPSWORKS_HOST: ${{ secrets.HOPSWORKS_HOST }}

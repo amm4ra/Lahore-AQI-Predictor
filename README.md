@@ -9,10 +9,18 @@ horizon) in the Hopsworks Model Registry, and served through a Streamlit dashboa
 
 | File | Purpose |
 |---|---|
-| `backfill.ipynb` | One-time historical pull (2 years) from Open-Meteo, feature engineering, and initial write to the Hopsworks Feature Store. Also includes a "gap-fill" step that closes the ~5-day ERA5 archive lag by pulling recent days from Open-Meteo's live forecast endpoint instead, so the feature store's latest row reflects the actual current time when you re-run it. |
-| `training-pipeline-multihorizon.ipynb` | Reads features from the Hopsworks Feature Store, trains Ridge / RandomForest / XGBoost / MLP for each horizon (+24h/+48h/+72h), compares them against a persistence baseline, and registers the best model per horizon in the Hopsworks Model Registry. |
+| `backfill.ipynb` | **One-time** historical pull (2 years) from Open-Meteo and initial write to the Hopsworks Feature Store. Run this once when setting the project up from scratch — never scheduled, since re-running it would re-fetch and re-upload 2 years of data every time. |
+| `feature_pipeline.ipynb` | **Hourly** job: pulls a recent window from Open-Meteo's live endpoints (no ERA5 lag) and inserts only the new rows into the feature store. Scheduled by `.github/workflows/feature-pipeline.yml`, which runs it headlessly via [papermill](https://papermill.readthedocs.io/). |
+| `training-pipeline-multihorizon.ipynb` | **Daily** job: trains Ridge / RandomForest / XGBoost / MLP for each horizon (+24h/+48h/+72h) on the current feature set, prints a comparison table, and registers the best model per horizon. Scheduled by `.github/workflows/training-pipeline.yml`, also via papermill. |
 | `app.py` | Streamlit dashboard: 3-day forecast (with dates), current conditions (pollutants + weather), EDA (AQI history, hourly pattern, last-24h trend), SHAP-based explanations, and hazard alerts. |
-| `requirements.txt` | Pinned dependencies for both the notebooks and the app. |
+| `requirements.txt` | Pinned dependencies for the app and the training notebook. |
+| `requirements-feature.txt` | Lighter dependency set for the hourly feature notebook (no torch/xgboost/shap needed for a data pull). |
+| `.github/workflows/` | GitHub Actions definitions for the two scheduled jobs above. |
+
+Both scheduled notebooks are run directly (via papermill), not converted to `.py` scripts — the
+only exception would be `backfill.ipynb`, which mixes a one-time 2-year fetch with logic you'd
+want to repeat, so its recurring part was split out into `feature_pipeline.ipynb` instead of
+scheduling the whole thing.
 
 ## What the dashboard does
 
@@ -70,9 +78,9 @@ for those, `setx HOPSWORKS_KEY "your_key"` (Windows) or `export HOPSWORKS_KEY=yo
 ### 3. Populate the Feature Store (first time only)
 
 Run `backfill.ipynb` top to bottom. It creates the `lahore_aqi_features` feature group and
-loads ~2 years of history. Its last cell (the gap-fill step) also closes the ERA5 lag so the
-latest row reflects the current day — re-run just that notebook whenever you want fresher data,
-until an automated pipeline exists to do it hourly.
+loads ~2 years of history, stopping ~5 days back (the ERA5 archive's publish lag). Keeping it
+current from there on is `feature_pipeline.ipynb`'s job (see CI/CD below) — you can also run it
+once by hand (Run All) right after the backfill.
 
 ### 4. Train and register models
 
@@ -88,6 +96,27 @@ streamlit run app.py
 
 Opens at http://localhost:8501.
 
+## CI/CD (GitHub Actions)
+
+Two scheduled workflows keep the project current without manual intervention — each installs
+its notebook's dependencies, registers a Jupyter kernel, then runs the notebook headlessly with
+`papermill notebook.ipynb /tmp/output.ipynb` (the executed output notebook is discarded, not
+committed back, so the repo stays clean):
+
+- **`.github/workflows/feature-pipeline.yml`** — runs `feature_pipeline.ipynb` every hour,
+  pulling the latest weather/AQI data into the feature store.
+- **`.github/workflows/training-pipeline.yml`** — runs `training-pipeline-multihorizon.ipynb`
+  once a day, retraining and re-registering the best model per horizon on the freshest data.
+
+Both need the same three Hopsworks values as repo secrets (**Settings → Secrets and variables →
+Actions → New repository secret**): `HOPSWORKS_KEY`, `HOPSWORKS_PROJECT`, `HOPSWORKS_HOST`.
+Once those are set, the schedules run on their own — you can also trigger either one manually
+from the **Actions** tab (`workflow_dispatch`) to test it without waiting for the cron.
+
+`app.py` picks up newly-registered models automatically: it always loads the highest version
+number per model name (not just whatever it saw first), and refreshes its model cache hourly
+(or immediately via the sidebar's **🔄 Refresh data & models** button).
+
 ## Deploying (Streamlit Community Cloud)
 
 1. Push this repo to GitHub (`.env` and `.streamlit/secrets.toml` are already git-ignored).
@@ -99,9 +128,9 @@ Opens at http://localhost:8501.
 
 ## Notes
 
-- **Predictions reflect the latest row in the feature store**, not necessarily right now — see
-  step 3 above. If it looks stale, re-run `backfill.ipynb`'s gap-fill step, then hit
-  **🔄 Refresh data** in the sidebar (feature data is cached for 1 hour).
+- **Predictions reflect the latest row in the feature store.** Once the CI/CD workflows above
+  are running, this stays current on its own; without them, run `feature_pipeline.ipynb` by
+  hand, then hit **🔄 Refresh data & models** in the sidebar (feature data is cached for 1 hour).
 - **Which model wins can differ per horizon** — check the sidebar for what's currently deployed
   and its R² per horizon.
 - **SHAP** uses `TreeExplainer` for RandomForest/XGBoost and `LinearExplainer` for Ridge; MLP
